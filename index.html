@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>企业员工抽奖</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  background:#130828;color:#fff;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ===== 背景 ===== */
+#bg-canvas{position:fixed;inset:0;pointer-events:none;z-index:0}
+
+/* ===== 页面容器 ===== */
+.app{position:relative;z-index:1;height:100vh;overflow:hidden}
+.page{display:none;height:100vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page.active{display:flex;flex-direction:column}
+
+/* ===== 通用按钮 ===== */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:13px 24px;border-radius:50px;
+  font-size:15px;font-weight:500;cursor:pointer;
+  border:none;outline:none;transition:opacity .15s,transform .1s;
+  letter-spacing:.3px;-webkit-appearance:none;
+}
+.btn:active{opacity:.85;transform:scale(.97)}
+.btn-primary{background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff}
+.btn-gold{
+  background:linear-gradient(135deg,#f6d365,#fda085);color:#fff;
+  font-size:17px;padding:16px 0;width:100%;border-radius:16px;
+  box-shadow:0 6px 24px rgba(246,211,101,.35);
+}
+.btn-outline{background:transparent;border:1px solid rgba(255,255,255,.25);color:rgba(255,255,255,.8)}
+.btn-sm{padding:9px 18px;font-size:13px}
+.btn-danger{background:linear-gradient(135deg,#f5576c,#c0392b);color:#fff}
+.btn-block{width:100%;border-radius:14px}
+
+/* ===== 表单 ===== */
+.input{
+  width:100%;padding:13px 15px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;color:#fff;font-size:15px;
+  outline:none;-webkit-appearance:none;
+}
+.input::placeholder{color:rgba(255,255,255,.3)}
+.input:focus{border-color:rgba(240,147,251,.5)}
+.input-group{margin-bottom:14px}
+.input-label{font-size:13px;color:rgba(255,255,255,.55);margin-bottom:7px}
+
+/* ===== 抽奖主页 ===== */
+#page-draw{background:linear-gradient(180deg,#1e0a3c 0%,#130828 100%)}
+
+.draw-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:env(safe-area-inset-top, 12px) 18px 12px;
+  padding-top:max(env(safe-area-inset-top),12px);
+  flex-shrink:0;
+}
+.draw-title{
+  font-size:17px;font-weight:500;
+  background:linear-gradient(90deg,#f6d365,#f093fb);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.admin-entry{
+  font-size:12px;color:rgba(255,255,255,.35);
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:5px 12px;cursor:pointer;
+}
+
+/* 奖品卡片区 */
+.prize-scroll-wrap{padding:0 18px 8px;flex-shrink:0}
+.prize-cards{display:flex;gap:10px;overflow-x:auto;padding-bottom:2px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.prize-cards::-webkit-scrollbar{display:none}
+.prize-card{
+  flex-shrink:0;width:calc(100vw - 64px);max-width:360px;
+  scroll-snap-align:start;
+  background:linear-gradient(135deg,rgba(246,211,101,.12),rgba(253,160,133,.08));
+  border:1px solid rgba(246,211,101,.25);
+  border-radius:16px;padding:14px 16px;
+  display:flex;align-items:center;gap:12px;
+  transition:border-color .2s;
+}
+.prize-card-icon{font-size:28px;flex-shrink:0}
+.prize-card-name{font-size:15px;font-weight:500;color:#f6d365}
+.prize-card-sub{font-size:12px;color:rgba(255,255,255,.5);margin-top:3px}
+
+/* 转盘区 */
+.wheel-section{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:0 20px;min-height:0;
+}
+.wheel-wrap{
+  position:relative;
+  width:min(72vw,300px);height:min(72vw,300px);
+  flex-shrink:0;
+}
+#wheel-canvas{width:100%;height:100%;display:block}
+.wheel-center{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:56px;height:56px;
+  background:linear-gradient(135deg,#f6d365,#fda085);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;
+  border:3px solid rgba(255,255,255,.9);
+  box-shadow:0 0 20px rgba(246,211,101,.5);
+  z-index:10;cursor:pointer;
+}
+.wheel-center.spinning{animation:wcenter .4s infinite alternate}
+@keyframes wcenter{from{transform:translate(-50%,-50%) scale(1)}to{transform:translate(-50%,-50%) scale(1.1)}}
+
+/* 底部操作区 */
+.draw-bottom{
+  padding:12px 18px;
+  padding-bottom:max(env(safe-area-inset-bottom),16px);
+  flex-shrink:0;
+}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.stat-item{
+  background:rgba(255,255,255,.06);border-radius:12px;
+  padding:10px 8px;text-align:center;
+}
+.stat-num{font-size:20px;font-weight:500;color:#f6d365}
+.stat-label{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
+
+.count-row{
+  display:flex;align-items:center;justify-content:center;
+  gap:14px;margin-bottom:10px;
+}
+.count-ctrl{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.18);
+  color:#fff;font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.count-num{font-size:22px;font-weight:500;color:#f6d365;min-width:36px;text-align:center}
+.count-unit{font-size:13px;color:rgba(255,255,255,.5)}
+
+.history-link{
+  text-align:center;margin-top:10px;
+  font-size:13px;color:rgba(255,255,255,.35);cursor:pointer;
+  padding:6px;
+}
+
+/* ===== 管理页 ===== */
+#page-admin{background:#0d0520;padding-bottom:40px}
+.admin-topbar{
+  display:flex;align-items:center;gap:12px;
+  padding:max(env(safe-area-inset-top),14px) 18px 14px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  flex-shrink:0;position:sticky;top:0;
+  background:#0d0520;z-index:10;
+}
+.back-btn{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.08);
+  border:none;color:#fff;font-size:17px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.admin-topbar-title{font-size:17px;font-weight:500}
+
+.admin-body{padding:16px 18px;overflow-y:auto;flex:1}
+.section{margin-bottom:22px}
+.section-hd{
+  font-size:13px;color:rgba(255,255,255,.45);
+  margin-bottom:10px;display:flex;align-items:center;gap:6px;
+  letter-spacing:.3px;
+}
+.section-hd::before{
+  content:'';width:3px;height:13px;border-radius:2px;
+  background:linear-gradient(#f093fb,#f5576c);flex-shrink:0;
+}
+
+/* 奖品列表 */
+.prize-list{display:flex;flex-direction:column;gap:8px}
+.prize-item{
+  display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:12px;padding:12px 14px;
+}
+.prize-item-icon{font-size:22px;flex-shrink:0}
+.prize-item-info{flex:1;min-width:0}
+.prize-item-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prize-item-sub{font-size:12px;color:rgba(255,255,255,.4);margin-top:2px}
+.icon-btn{
+  width:30px;height:30px;border-radius:8px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  background:rgba(255,255,255,.07);color:#f5576c;flex-shrink:0;
+}
+
+/* 员工输入 */
+.emp-textarea{
+  width:100%;min-height:110px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:12px;
+  color:#fff;font-size:14px;line-height:1.75;
+  outline:none;resize:none;font-family:inherit;
+  -webkit-appearance:none;
+}
+.emp-textarea:focus{border-color:rgba(240,147,251,.4)}
+.emp-hint{font-size:12px;color:rgba(255,255,255,.3);margin-top:6px}
+.emp-count{
+  font-size:12px;color:rgba(246,211,101,.8);margin-top:4px;
+  font-weight:500;
+}
+
+/* 设置开关 */
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);
+}
+.setting-label{font-size:14px}
+.setting-sub{font-size:12px;color:rgba(255,255,255,.35);margin-top:3px}
+.toggle{
+  width:48px;height:28px;border-radius:14px;
+  background:rgba(255,255,255,.12);position:relative;
+  cursor:pointer;transition:background .25s;flex-shrink:0;
+}
+.toggle.on{background:linear-gradient(135deg,#f093fb,#f5576c)}
+.toggle::after{
+  content:'';position:absolute;
+  top:4px;left:4px;width:20px;height:20px;border-radius:50%;
+  background:#fff;transition:left .22s;
+}
+.toggle.on::after{left:24px}
+
+/* 分享卡片 */
+.share-card{
+  background:rgba(80,0,180,.2);
+  border:1px solid rgba(240,147,251,.2);
+  border-radius:16px;padding:16px;
+}
+.share-card-desc{font-size:13px;color:rgba(255,255,255,.55);margin-bottom:10px}
+.share-url-box{
+  display:flex;gap:8px;align-items:stretch;
+}
+.share-url-text{
+  flex:1;background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:10px 12px;
+  color:rgba(255,255,255,.6);font-size:12px;
+  word-break:break-all;line-height:1.4;
+}
+.share-hint{font-size:11px;color:rgba(255,255,255,.25);margin-top:8px}
+
+/* 部署引导 */
+.deploy-card{
+  background:rgba(246,211,101,.07);
+  border:1px solid rgba(246,211,101,.2);
+  border-radius:14px;padding:14px;margin-top:12px;
+}
+.deploy-title{font-size:13px;font-weight:500;color:#f6d365;margin-bottom:8px}
+.deploy-step{
+  display:flex;gap:8px;margin-bottom:8px;
+  font-size:13px;color:rgba(255,255,255,.65);line-height:1.5;
+}
+.deploy-num{
+  width:20px;height:20px;border-radius:50%;
+  background:rgba(246,211,101,.2);color:#f6d365;
+  font-size:11px;font-weight:500;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;
+}
+.deploy-link{color:#f6d365;text-decoration:none}
+
+/* ===== 弹窗 ===== */
+.overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.65);
+  z-index:100;align-items:flex-end;justify-content:center;
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+}
+.overlay.show{display:flex}
+.sheet{
+  background:linear-gradient(180deg,#2a1456,#1a0a2e);
+  border:1px solid rgba(240,147,251,.15);
+  border-radius:24px 24px 0 0;
+  padding:20px 20px;
+  width:100%;max-width:520px;
+  padding-bottom:max(env(safe-area-inset-bottom),20px);
+  animation:sheet-up .3s cubic-bezier(.34,1.56,.64,1);
+  max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+}
+@keyframes sheet-up{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+.sheet-handle{
+  width:36px;height:4px;border-radius:2px;
+  background:rgba(255,255,255,.2);margin:0 auto 16px;
+}
+.sheet-title{font-size:17px;font-weight:500;margin-bottom:16px;text-align:center}
+
+/* 中奖弹窗居中 */
+.overlay.center{align-items:center}
+.overlay.center .sheet{
+  border-radius:24px;max-width:380px;
+  margin:0 16px;animation:modal-pop .35s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes modal-pop{from{transform:scale(.75);opacity:0}to{transform:scale(1);opacity:1}}
+
+.result-emoji{font-size:52px;text-align:center;margin-bottom:10px}
+.result-title{font-size:20px;font-weight:500;color:#f6d365;text-align:center}
+.result-sub{font-size:13px;color:rgba(255,255,255,.5);text-align:center;margin-top:4px;margin-bottom:14px}
+.winner-list{
+  background:rgba(255,255,255,.05);border-radius:14px;
+  padding:12px;margin-bottom:16px;max-height:200px;overflow-y:auto;
+}
+.winner-row{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);
+}
+.winner-row:last-child{border-bottom:none}
+.winner-av{
+  width:34px;height:34px;border-radius:50%;
+  background:linear-gradient(135deg,#f093fb,#f5576c);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:500;flex-shrink:0;
+}
+.winner-name{font-size:15px;font-weight:500}
+.winner-dept{font-size:12px;color:rgba(255,255,255,.45)}
+
+/* 密码弹窗 */
+.pwd-input{
+  width:100%;padding:14px;margin:12px 0 4px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);border-radius:12px;
+  color:#fff;font-size:18px;text-align:center;letter-spacing:6px;
+  outline:none;-webkit-appearance:none;
+}
+.pwd-error{color:#f5576c;font-size:13px;text-align:center;margin-bottom:12px;min-height:18px}
+
+/* 历史记录 */
+.history-wrap{max-height:55vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.history-item{
+  background:rgba(255,255,255,.04);border-radius:12px;
+  padding:12px;margin-bottom:8px;
+}
+.history-item-hd{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:8px}
+.winner-tag{
+  display:inline-flex;align-items:center;
+  background:rgba(246,211,101,.1);border:1px solid rgba(246,211,101,.25);
+  border-radius:20px;padding:4px 10px;font-size:13px;
+  color:#f6d365;margin:3px;
+}
+
+/* 添加奖品 */
+#prize-modal .sheet{border-radius:24px 24px 0 0}
+
+/* 彩带 */
+.confetti-wrap{position:fixed;inset:0;pointer-events:none;z-index:99;overflow:hidden}
+.piece{
+  position:absolute;border-radius:2px;
+  animation:fall linear forwards;
+}
+@keyframes fall{
+  0%{transform:translateY(-20px) rotate(0deg);opacity:1}
+  100%{transform:translateY(105vh) rotate(720deg);opacity:0}
+}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:max(env(safe-area-inset-bottom),30px);
+  left:50%;transform:translateX(-50%);
+  background:rgba(30,12,60,.95);border:1px solid rgba(240,147,251,.25);
+  border-radius:30px;padding:10px 20px;
+  font-size:14px;color:#fff;z-index:200;
+  white-space:nowrap;pointer-events:none;
+  animation:tin .25s,tout .25s 2.1s forwards;
+}
+@keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes tout{to{opacity:0}}
+
+/* 等待页 */
+#page-waiting{
+  align-items:center;justify-content:center;
+  text-align:center;gap:18px;padding:40px 24px;
+  background:linear-gradient(180deg,#1e0a3c,#130828);
+}
+.wait-icon{font-size:72px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.wait-title{font-size:20px;font-weight:500}
+.wait-sub{font-size:14px;color:rgba(255,255,255,.45);margin-top:6px}
+
+/* 按钮行 */
+.btn-row{display:flex;gap:10px;margin-top:4px}
+.btn-row .btn{flex:1}
+
+/* 空状态 */
+.empty{text-align:center;padding:24px;color:rgba(255,255,255,.25);font-size:13px}
+
+/* 奖品用罄标签 */
+.prize-empty-tag{
+  display:inline-block;
+  background:rgba(255,255,255,.06);
+  border-radius:8px;padding:2px 8px;
+  font-size:11px;color:rgba(255,255,255,.3);
+  margin-left:6px;
+}
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="app">
+
+<!-- ===== 抽奖主页 ===== -->
+<div id="page-draw" class="page active">
+  <div class="draw-topbar">
+    <div class="draw-title" id="act-title">🎊 年度员工抽奖</div>
+    <div class="admin-entry" onclick="showAdminLogin()">管理员</div>
+  </div>
+
+  <!-- 奖品横滑卡片 -->
+  <div class="prize-scroll-wrap">
+    <div class="prize-cards" id="prize-cards"></div>
+  </div>
+
+  <!-- 转盘 -->
+  <div class="wheel-section">
+    <div class="wheel-wrap">
+      <canvas id="wheel-canvas"></canvas>
+      <div class="wheel-center" id="wheel-center" onclick="startDraw()">🎯</div>
+    </div>
+  </div>
+
+  <!-- 底部 -->
+  <div class="draw-bottom">
+    <div class="stats-row">
+      <div class="stat-item">
+        <div class="stat-num" id="stat-total">0</div>
+        <div class="stat-label">参与员工</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="stat-avail">0</div>
+        <div class="stat-label">可抽人数</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="stat-prize-left">0</div>
+        <div class="stat-label">剩余奖品</div>
+      </div>
+    </div>
+    <div class="count-row">
+      <button class="count-ctrl" onclick="changeCount(-1)">−</button>
+      <div class="count-num" id="count-num">1</div>
+      <button class="count-ctrl" onclick="changeCount(1)">+</button>
+      <span class="count-unit">人/次</span>
+    </div>
+    <button class="btn btn-gold" id="draw-btn" onclick="startDraw()">🎊 开始抽奖</button>
+    <div class="history-link" onclick="showHistory()">查看历史记录 ›</div>
+  </div>
+</div>
+
+<!-- ===== 等待配置页 ===== -->
+<div id="page-waiting" class="page">
+  <div class="wait-icon">🎪</div>
+  <div>
+    <div class="wait-title">等待管理员配置</div>
+    <div class="wait-sub">需要先添加员工名单和奖品</div>
+  </div>
+  <button class="btn btn-primary" onclick="showAdminLogin()">我是管理员，去配置</button>
+</div>
+
+<!-- ===== 管理页 ===== -->
+<div id="page-admin" class="page">
+  <div class="admin-topbar">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <div class="admin-topbar-title">活动管理</div>
+  </div>
+  <div class="admin-body">
+
+    <div class="section">
+      <div class="section-hd">基本设置</div>
+      <div class="input-group">
+        <div class="input-label">活动名称</div>
+        <input class="input" id="cfg-title" placeholder="如：2025年度员工抽奖" oninput="saveConfig()">
+      </div>
+      <div class="input-group">
+        <div class="input-label">管理员密码（留空则无需密码）</div>
+        <input class="input" id="cfg-pwd" type="password" placeholder="留空则任何人都可进入管理页" oninput="saveConfig()">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hd">奖品设置</div>
+      <div class="prize-list" id="prize-list"></div>
+      <button class="btn btn-outline btn-block btn-sm" style="margin-top:10px" onclick="openPrizeModal()">+ 添加奖品</button>
+    </div>
+
+    <div class="section">
+      <div class="section-hd">员工名单</div>
+      <textarea class="emp-textarea" id="emp-input"
+        placeholder="每行一位员工，支持两种格式：&#10;张三&#10;李四,技术部&#10;王五,市场部"
+        oninput="parseEmps()"></textarea>
+      <div class="emp-hint">每行一人，支持「姓名」或「姓名,部门」两种格式</div>
+      <div class="emp-count" id="emp-count"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-hd">抽奖规则</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">禁止重复中奖</div>
+          <div class="setting-sub">开启后每人全程只能中奖一次</div>
+        </div>
+        <div class="toggle on" id="tog-norepeat" onclick="toggleSetting('noRepeat')"></div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">允许已中奖者参与其他奖项</div>
+          <div class="setting-sub">关闭时，已中奖者不再参与任何后续抽奖</div>
+        </div>
+        <div class="toggle" id="tog-cross" onclick="toggleSetting('crossPrize')"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hd">数据管理</div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm" onclick="resetDraw()">重置抽奖记录</button>
+        <button class="btn btn-danger btn-sm" onclick="clearAll()">清空所有数据</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-hd">分享给员工</div>
+      <div class="share-card">
+        <div class="share-card-desc">配置完成后，点击「生成分享链接」，然后将链接发给员工</div>
+        <div class="share-url-box">
+          <div class="share-url-text" id="share-url-text">请先点击「生成分享链接」</div>
+          <button class="btn btn-primary btn-sm" onclick="copyUrl()" style="flex-shrink:0">复制链接</button>
+        </div>
+        <div style="margin-top:10px">
+          <button class="btn btn-gold btn-sm btn-block" onclick="syncHash()" style="font-size:14px;padding:11px 0">⚡ 生成分享链接</button>
+        </div>
+        <div class="share-hint" id="share-hint"></div>
+      </div>
+
+      <!-- 部署引导（仅在 file:// 时显示） -->
+      <div class="deploy-card" id="deploy-guide" style="display:none">
+        <div class="deploy-title">⚡ 如何让员工通过手机访问？</div>
+        <div class="deploy-step">
+          <div class="deploy-num">1</div>
+          <div>注册 <a class="deploy-link" href="https://github.com" target="_blank">github.com</a>，新建一个公开仓库（如 <code>lottery</code>）</div>
+        </div>
+        <div class="deploy-step">
+          <div class="deploy-num">2</div>
+          <div>将 <strong>index.html</strong> 上传到仓库根目录</div>
+        </div>
+        <div class="deploy-step">
+          <div class="deploy-num">3</div>
+          <div>进入仓库 Settings → Pages → Branch 选 main → Save</div>
+        </div>
+        <div class="deploy-step">
+          <div class="deploy-num">4</div>
+          <div>约 1 分钟后访问 <code>https://用户名.github.io/仓库名/</code>，将该链接发给员工即可</div>
+        </div>
+        <div style="font-size:12px;color:rgba(255,255,255,.3);margin-top:4px">GitHub Pages 完全免费 · 国内可正常访问</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<!-- ===== 弹窗：管理员密码 ===== -->
+<div class="overlay center" id="pwd-overlay">
+  <div class="sheet" style="border-radius:24px;max-width:340px;margin:0 20px">
+    <div class="sheet-title">管理员入口</div>
+    <div class="input-label" style="text-align:center">请输入管理员密码</div>
+    <input class="pwd-input" id="pwd-val" type="password" placeholder="••••" maxlength="20"
+      onkeydown="if(event.key==='Enter')checkPwd()">
+    <div class="pwd-error" id="pwd-err"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closePwdOverlay()">取消</button>
+      <button class="btn btn-primary" onclick="checkPwd()">进入</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 弹窗：添加奖品 ===== -->
+<div class="overlay" id="prize-overlay">
+  <div class="sheet" id="prize-modal">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">添加奖品</div>
+    <div class="input-group">
+      <div class="input-label">图标 Emoji</div>
+      <input class="input" id="np-icon" maxlength="4" value="🎁">
+    </div>
+    <div class="input-group">
+      <div class="input-label">奖品名称</div>
+      <input class="input" id="np-name" placeholder="如：一等奖 · AirPods Pro">
+    </div>
+    <div class="input-group">
+      <div class="input-label">中奖名额</div>
+      <input class="input" id="np-count" type="number" min="1" value="1">
+    </div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn btn-outline" onclick="closePrizeModal()">取消</button>
+      <button class="btn btn-primary" onclick="doAddPrize()">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 弹窗：中奖结果 ===== -->
+<div class="overlay center" id="result-overlay">
+  <div class="sheet" style="border-radius:24px;max-width:400px;margin:0 16px;text-align:center">
+    <div class="result-emoji" id="res-emoji">🎉</div>
+    <div class="result-title" id="res-title">恭喜中奖！</div>
+    <div class="result-sub" id="res-sub">以下同事获奖</div>
+    <div class="winner-list" id="res-winners"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeResult()">关闭</button>
+      <button class="btn btn-gold" style="padding:13px 0" onclick="drawAgain()">再抽一次</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 弹窗：历史记录 ===== -->
+<div class="overlay" id="history-overlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">中奖记录</div>
+    <div class="history-wrap" id="history-wrap"></div>
+    <button class="btn btn-outline btn-block" style="margin-top:12px" onclick="closeHistory()">关闭</button>
+  </div>
+</div>
+
+<!-- 彩带容器 -->
+<div class="confetti-wrap" id="confetti"></div>
+
+<script>
+// ============================================================
+//  数据层
+// ============================================================
+const KEY = 'lotto_v3';
+let S = {
+  title: '🎊 年度员工抽奖',
+  pwd: '',
+  prizes: [
+    {id:1, icon:'🥇', name:'一等奖 · AirPods Pro', total:1, drawn:[]},
+    {id:2, icon:'🥈', name:'二等奖 · 购物卡500元', total:3, drawn:[]},
+    {id:3, icon:'🥉', name:'三等奖 · 好运红包', total:10, drawn:[]},
+  ],
+  employees: [],
+  settings: {noRepeat:true, crossPrize:false},
+  history: [],
+};
+let nextId = 10, drawCnt = 1, spinning = false, angle = 0;
+
+// ============================================================
+//  URL Hash 数据编码/解码（用于分享配置）
+// ============================================================
+function encodeData(obj) {
+  try {
+    const json = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(json);
+    return btoa(String.fromCharCode(...bytes));
+  } catch(e) { return ''; }
+}
+function decodeData(hash) {
+  try {
+    const bytes = Uint8Array.from(atob(hash), c => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch(e) { return null; }
+}
+
+// ============================================================
+//  加载 / 保存
+// ============================================================
+function load() {
+  // 优先从 URL Hash 加载（管理员分享的链接）
+  if (location.hash && location.hash.length > 2) {
+    const data = decodeData(location.hash.slice(1));
+    if (data && Array.isArray(data.prizes) && Array.isArray(data.employees)) {
+      S.title    = data.title || S.title;
+      S.pwd      = data.pwd || '';
+      S.prizes   = data.prizes;
+      S.employees= data.employees;
+      S.settings = data.settings || {noRepeat:true, crossPrize:false};
+      S.history  = data.history || [];
+      nextId = Math.max(...S.prizes.map(p=>p.id), 9) + 1;
+      try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){}
+      return;
+    }
+  }
+  // 回退到 localStorage
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY)||'null');
+    if (d) {
+      Object.assign(S, d);
+      nextId = Math.max(...S.prizes.map(p=>p.id), 9) + 1;
+    }
+  } catch(e){}
+}
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){}
+  // 如果当前 URL 带有 hash 配置，同步更新 hash（管理员端保持链接最新）
+  if (location.hash && location.hash.length > 2) {
+    try {
+      const payload = {
+        title: S.title,
+        pwd: S.pwd,
+        prizes: S.prizes,
+        employees: S.employees,
+        settings: S.settings,
+        history: S.history,
+      };
+      history.replaceState(null, '', '#' + encodeData(payload));
+    } catch(e){}
+  }
+}
+
+// ============================================================
+//  将当前配置同步到 URL Hash（管理员点击「生成分享链接」时调用）
+// ============================================================
+function syncHash() {
+  const payload = {
+    title: S.title,
+    pwd: S.pwd,
+    prizes: S.prizes,
+    employees: S.employees,
+    settings: S.settings,
+    history: S.history,
+  };
+  const encoded = encodeData(payload);
+  if (!encoded) { toast('数据太大，无法生成链接'); return; }
+  history.replaceState(null, '', '#' + encoded);
+  refreshAdmin();
+  toast('链接已生成！请点击「复制链接」分享');
+}
+
+// ============================================================
+//  背景粒子
+// ============================================================
+(function(){
+  const c = document.getElementById('bg-canvas');
+  const ctx = c.getContext('2d');
+  let pts = [];
+  function resize(){c.width=innerWidth;c.height=innerHeight}
+  resize(); window.addEventListener('resize', resize);
+  for(let i=0;i<50;i++) pts.push({
+    x:Math.random()*innerWidth, y:Math.random()*innerHeight,
+    r:Math.random()*1.4+.3,
+    vx:(Math.random()-.5)*.25, vy:(Math.random()-.5)*.25,
+    a:Math.random()*.5+.15
+  });
+  (function loop(){
+    ctx.clearRect(0,0,c.width,c.height);
+    pts.forEach(p=>{
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(200,120,255,${p.a})`; ctx.fill();
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0)p.x=c.width; if(p.x>c.width)p.x=0;
+      if(p.y<0)p.y=c.height; if(p.y>c.height)p.y=0;
+    });
+    requestAnimationFrame(loop);
+  })();
+})();
+
+// ============================================================
+//  转盘渲染 — 显示所有剩余奖品图标
+// ============================================================
+function drawWheel(a) {
+  const cv = document.getElementById('wheel-canvas');
+  const rect = cv.getBoundingClientRect();
+  if (!rect.width) return;
+  const dpr = window.devicePixelRatio||1;
+  cv.width = rect.width*dpr; cv.height = rect.height*dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr,dpr);
+  const W=rect.width, H=rect.height, cx=W/2, cy=H/2, r=Math.min(W,H)/2-4;
+
+  // 构建转盘扇区：所有仍有剩余的奖品（每个剩余名额一个扇区，最多24个）
+  const segs = [];
+  S.prizes.forEach(p => {
+    const rem = p.total - p.drawn.length;
+    for (let i = 0; i < rem && segs.length < 24; i++) segs.push(p);
+  });
+
+  // 没有任何剩余奖品时显示默认文字
+  const n = segs.length || 1;
+  const arc = Math.PI*2/n;
+  const pal = ['#3b1f7a','#5b2d99','#7c3fc0','#9d52e0','#4a2690','#6b3aaa','#8c4ec4','#a062d8'];
+
+  for (let i=0; i<n; i++) {
+    const s = a + i*arc - Math.PI/2, e = s+arc;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,s,e); ctx.closePath();
+    ctx.fillStyle = pal[i % pal.length]; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(s+arc/2);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,255,255,.88)';
+    const fs = Math.max(10, Math.min(20, 60/n+8));
+    ctx.font = `${fs}px -apple-system,PingFang SC,sans-serif`;
+    if (segs[i]) {
+      ctx.fillText(segs[i].icon, r*0.62, fs*0.35);
+    }
+    ctx.restore();
+  }
+  // 外圈
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle='rgba(240,147,251,.35)'; ctx.lineWidth=3; ctx.stroke();
+  // 顶部指针
+  ctx.save(); ctx.translate(cx, cy-r+4);
+  ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(7,5); ctx.lineTo(-7,5); ctx.closePath();
+  ctx.fillStyle='#f6d365'; ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  可抽奖员工池
+// ============================================================
+function getPool() {
+  return S.employees.filter(e => {
+    if (S.settings.noRepeat) {
+      // 已中过任何奖的排除
+      const all = S.prizes.flatMap(x => x.drawn);
+      if (all.includes(e.name)) return false;
+    } else if (!S.settings.crossPrize) {
+      // noRepeat=false 且 crossPrize=false：不允许同一人重复中奖
+      const all = S.prizes.flatMap(x => x.drawn);
+      if (all.includes(e.name)) return false;
+    }
+    return true;
+  });
+}
+
+// ============================================================
+//  构建剩余奖品池（平铺数组，每个剩余名额一个元素）
+// ============================================================
+function getPrizePool() {
+  const pool = [];
+  S.prizes.forEach((p, idx) => {
+    const rem = p.total - p.drawn.length;
+    for (let i=0; i<rem; i++) pool.push(idx);
+  });
+  return pool;
+}
+
+// ============================================================
+//  抽奖 — 所有奖品进入同一奖池，一次抽取
+// ============================================================
+function startDraw() {
+  if (spinning) return;
+
+  const prizePool = getPrizePool();
+  if (!prizePool.length) { toast('所有奖品已抽完'); return; }
+  if (!S.employees.length) { toast('请先添加员工名单'); return; }
+
+  const pool = getPool();
+  if (!pool.length) { toast('没有可抽的员工了'); return; }
+
+  const cnt = Math.min(drawCnt, pool.length, prizePool.length);
+
+  spinning = true;
+  document.getElementById('draw-btn').disabled = true;
+  document.getElementById('wheel-center').classList.add('spinning');
+
+  // 先随机选出中奖者和奖品（动画期间计算好结果）
+  const shuffledEmps = shuffle([...pool]);
+  const shuffledPrizes = shuffle([...prizePool]);
+  const winners = [];
+  for (let i=0; i<cnt; i++) {
+    const w = shuffledEmps[i];
+    const pIdx = shuffledPrizes[i];
+    winners.push({ employee: w, prizeIdx: pIdx, prize: S.prizes[pIdx] });
+  }
+
+  // 转盘动画
+  const rot = Math.PI*2 * (5 + Math.random()*5);
+  const dur = 2400, t0 = performance.now(), a0 = angle;
+
+  (function loop(now) {
+    const t = Math.min((now-t0)/dur, 1);
+    const ease = 1 - Math.pow(1-t, 3);
+    angle = a0 + rot*ease;
+    drawWheel(angle);
+    if (t < 1) { requestAnimationFrame(loop); return; }
+
+    // 动画完成 — 写入结果
+    spinning = false;
+    document.getElementById('draw-btn').disabled = false;
+    document.getElementById('wheel-center').classList.remove('spinning');
+
+    winners.forEach(w => {
+      S.prizes[w.prizeIdx].drawn.push(w.employee.name);
+    });
+
+    S.history.push({
+      time: new Date().toLocaleString(),
+      winners: winners.map(w => ({
+        name: w.employee.name,
+        dept: w.employee.dept || '',
+        prize: w.prize.name,
+        icon: w.prize.icon,
+      })),
+    });
+
+    save(); updateUI();
+    showResult(winners);
+  })(performance.now());
+}
+
+// ============================================================
+//  显示中奖结果
+// ============================================================
+function showResult(winners) {
+  document.getElementById('res-emoji').textContent = '🎉';
+  document.getElementById('res-title').textContent =
+    winners.length === 1 ? '恭喜中奖！' : `恭喜 ${winners.length} 位同事！`;
+  document.getElementById('res-sub').textContent = '获奖名单';
+  document.getElementById('res-winners').innerHTML = winners.map(w => `
+    <div class="winner-row">
+      <div class="winner-av">${w.employee.name.charAt(0)}</div>
+      <div>
+        <div class="winner-name">${w.employee.name}${w.employee.dept?' <span style="font-size:12px;color:rgba(255,255,255,.45)">('+w.employee.dept+')</span>':''}</div>
+        <div class="winner-dept">${w.prize.icon} ${w.prize.name}</div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('result-overlay').classList.add('show');
+  confetti();
+}
+function closeResult(){ document.getElementById('result-overlay').classList.remove('show'); }
+function drawAgain(){ closeResult(); setTimeout(startDraw, 300); }
+
+// ============================================================
+//  彩带
+// ============================================================
+function confetti(){
+  const wrap = document.getElementById('confetti');
+  wrap.innerHTML='';
+  const clrs=['#f6d365','#f093fb','#f5576c','#a18cd1','#4facfe','#ffecd2','#00f2fe'];
+  for(let i=0;i<90;i++){
+    const d=document.createElement('div');
+    d.className='piece';
+    d.style.cssText=`
+      left:${Math.random()*100}vw;top:${-15-Math.random()*15}px;
+      background:${clrs[i%clrs.length]};
+      width:${5+Math.random()*7}px;height:${5+Math.random()*7}px;
+      border-radius:${Math.random()>.5?'50%':'2px'};
+      animation-duration:${1.4+Math.random()*2}s;
+      animation-delay:${Math.random()*.4}s;
+    `;
+    wrap.appendChild(d);
+  }
+  setTimeout(()=>wrap.innerHTML='',4000);
+}
+
+// ============================================================
+//  全局 UI 刷新
+// ============================================================
+function updateUI(){
+  document.getElementById('act-title').textContent = S.title||'🎊 企业员工抽奖';
+
+  // 奖品卡片（横滑，纯展示）
+  const cards = document.getElementById('prize-cards');
+  if (!S.prizes.length) {
+    cards.innerHTML = '<div style="color:rgba(255,255,255,.3);font-size:13px;padding:14px 2px">暂无奖品，请管理员添加</div>';
+  } else {
+    cards.innerHTML = S.prizes.map(p => {
+      const rem = p.total - p.drawn.length;
+      const exhausted = rem <= 0;
+      return `
+        <div class="prize-card" style="${exhausted?'opacity:.4':''}">
+          <div class="prize-card-icon">${p.icon}</div>
+          <div>
+            <div class="prize-card-name">${p.name}${exhausted?' <span class="prize-empty-tag">已抽完</span>':''}</div>
+            <div class="prize-card-sub">剩余 ${rem} 名 · 共 ${p.total} 名</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const pool = getPool();
+  const prizePool = getPrizePool();
+  document.getElementById('stat-total').textContent = S.employees.length;
+  document.getElementById('stat-avail').textContent = pool.length;
+  document.getElementById('stat-prize-left').textContent = prizePool.length;
+
+  drawWheel(angle);
+}
+
+// ============================================================
+//  管理页
+// ============================================================
+function goBack(){ showPage('page-draw'); }
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='page-draw') updateUI();
+  if(id==='page-admin') refreshAdmin();
+}
+
+function refreshAdmin(){
+  document.getElementById('cfg-title').value = S.title||'';
+  document.getElementById('cfg-pwd').value = S.pwd||'';
+  renderPrizeList();
+  // 员工输入框
+  const ta = document.getElementById('emp-input');
+  if(!ta.value.trim() && S.employees.length)
+    ta.value = S.employees.map(e=>e.name+(e.dept?','+e.dept:'')).join('\n');
+  updateEmpCount();
+  document.getElementById('tog-norepeat').className='toggle '+(S.settings.noRepeat?'on':'');
+  document.getElementById('tog-cross').className='toggle '+(S.settings.crossPrize?'on':'');
+
+  // 分享链接区域
+  const hasHash = location.hash && location.hash.length > 2;
+  if (hasHash) {
+    document.getElementById('share-url-text').textContent = location.href;
+    document.getElementById('share-hint').textContent = '链接已包含最新配置，直接复制发给员工即可';
+  } else {
+    document.getElementById('share-url-text').textContent = '请先点击上方「生成分享链接」按钮';
+    document.getElementById('share-hint').textContent = '';
+  }
+
+  // 部署引导（仅在 file:// 时显示）
+  const isFile = location.href.startsWith('file://');
+  document.getElementById('deploy-guide').style.display = isFile ? 'block' : 'none';
+}
+
+function saveConfig(){
+  S.title = document.getElementById('cfg-title').value||'🎊 年度员工抽奖';
+  S.pwd = document.getElementById('cfg-pwd').value;
+  save();
+}
+function toggleSetting(k){
+  S.settings[k]=!S.settings[k];
+  document.getElementById('tog-norepeat').className='toggle '+(S.settings.noRepeat?'on':'');
+  document.getElementById('tog-cross').className='toggle '+(S.settings.crossPrize?'on':'');
+  save();
+}
+
+// 奖品列表（管理页）
+function renderPrizeList(){
+  const el=document.getElementById('prize-list');
+  if(!S.prizes.length){el.innerHTML='<div class="empty">暂无奖品，点击下方添加</div>';return;}
+  el.innerHTML=S.prizes.map((p,i)=>{
+    const rem = p.total - p.drawn.length;
+    return `
+      <div class="prize-item">
+        <div class="prize-item-icon">${p.icon}</div>
+        <div class="prize-item-info">
+          <div class="prize-item-name">${p.name}</div>
+          <div class="prize-item-sub">共 ${p.total} 名 · 已抽 ${p.drawn.length} 名 · 剩余 ${rem} 名</div>
+        </div>
+        <button class="icon-btn" onclick="delPrize(${i})" title="删除">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function openPrizeModal(){
+  document.getElementById('np-icon').value='🎁';
+  document.getElementById('np-name').value='';
+  document.getElementById('np-count').value='1';
+  document.getElementById('prize-overlay').classList.add('show');
+}
+function closePrizeModal(){ document.getElementById('prize-overlay').classList.remove('show'); }
+function doAddPrize(){
+  const icon=document.getElementById('np-icon').value.trim()||'🎁';
+  const name=document.getElementById('np-name').value.trim();
+  const total=parseInt(document.getElementById('np-count').value)||1;
+  if(!name){toast('请填写奖品名称');return;}
+  S.prizes.push({id:nextId++, icon, name, total, drawn:[]});
+  save(); closePrizeModal(); renderPrizeList(); updateUI();
+}
+function delPrize(i){
+  if(!confirm(`删除「${S.prizes[i].name}」？`))return;
+  S.prizes.splice(i,1);
+  save(); renderPrizeList(); updateUI();
+}
+
+// 员工
+function parseEmps(){
+  const lines=document.getElementById('emp-input').value.split('\n').map(l=>l.trim()).filter(l=>l);
+  S.employees=[];
+  lines.forEach(line=>{
+    const p=line.split(/[,，\t]/);
+    const name=p[0].trim(), dept=p[1]?p[1].trim():'';
+    if(name) S.employees.push({name,dept});
+  });
+  save(); updateEmpCount(); updateUI();
+}
+function updateEmpCount(){
+  document.getElementById('emp-count').textContent = S.employees.length ? `已录入 ${S.employees.length} 位员工` : '';
+}
+
+// 重置 / 清空
+function resetDraw(){
+  if(!confirm('确定重置所有抽奖记录？已抽出的中奖者将放回奖池。'))return;
+  S.prizes.forEach(p=>p.drawn=[]);
+  S.history=[];
+  save(); updateUI(); toast('已重置');
+}
+function clearAll(){
+  if(!confirm('清空所有数据？此操作不可撤销。'))return;
+  S.title='🎊 年度员工抽奖';
+  S.pwd='';
+  S.prizes=[];
+  S.employees=[];
+  S.settings={noRepeat:true,crossPrize:false};
+  S.history=[];
+  // 清除 URL hash
+  history.replaceState(null,'',location.pathname+location.search);
+  save(); refreshAdmin(); updateUI(); toast('已清空');
+}
+
+// 复制链接
+function copyUrl(){
+  const href = location.href;
+  if (!location.hash || location.hash.length <= 2) {
+    toast('请先点击「生成分享链接」再复制');
+    return;
+  }
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(href).then(()=>toast('链接已复制！'));
+  } else {
+    const t=document.createElement('textarea');
+    t.value=href; document.body.appendChild(t); t.select(); document.execCommand('copy');
+    document.body.removeChild(t); toast('链接已复制！');
+  }
+}
+
+// 历史
+function showHistory(){
+  const wrap=document.getElementById('history-wrap');
+  if(!S.history.length){wrap.innerHTML='<div class="empty">暂无记录</div>';}
+  else wrap.innerHTML=[...S.history].reverse().map(h=>`
+    <div class="history-item">
+      <div class="history-item-hd">${h.time}</div>
+      <div>${h.winners.map(w=>{
+        const deptPart = w.dept ? `(${w.dept})` : '';
+        return `<span class="winner-tag">${w.icon} ${w.name} ${deptPart} — ${w.prize}</span>`;
+      }).join('')}</div>
+    </div>
+  `).join('');
+  document.getElementById('history-overlay').classList.add('show');
+}
+function closeHistory(){ document.getElementById('history-overlay').classList.remove('show'); }
+
+// 人数
+function changeCount(d){ drawCnt=Math.max(1,Math.min(20,drawCnt+d)); document.getElementById('count-num').textContent=drawCnt; }
+
+// ============================================================
+//  管理员登录
+// ============================================================
+function showAdminLogin(){
+  if(!S.pwd){showPage('page-admin');return;}
+  document.getElementById('pwd-val').value='';
+  document.getElementById('pwd-err').textContent='';
+  document.getElementById('pwd-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('pwd-val').focus(),120);
+}
+function closePwdOverlay(){ document.getElementById('pwd-overlay').classList.remove('show'); }
+function checkPwd(){
+  const v=document.getElementById('pwd-val').value;
+  if(v===S.pwd){closePwdOverlay();showPage('page-admin');}
+  else{
+    document.getElementById('pwd-err').textContent='密码错误，请重试';
+    document.getElementById('pwd-val').value='';
+    document.getElementById('pwd-val').focus();
+  }
+}
+
+// ============================================================
+//  Toast
+// ============================================================
+function toast(msg){
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const el=document.createElement('div');
+  el.className='toast'; el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2600);
+}
+
+// ============================================================
+//  工具
+// ============================================================
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+// ============================================================
+//  点击遮罩关闭
+// ============================================================
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show');});
+});
+
+// ============================================================
+//  初始化
+// ============================================================
+window.addEventListener('load',()=>{
+  load(); updateUI();
+  new ResizeObserver(()=>drawWheel(angle)).observe(document.getElementById('wheel-canvas'));
+});
+</script>
+</body>
+</html>
